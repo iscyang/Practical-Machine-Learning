@@ -1,0 +1,68 @@
+Building Classifier by Machine Learning
+========================================================
+
+### This is a short report on building an activity classifier by machine learning algorithm that examines data collected by sensors worn by different subjects.  The machine learning algorithm automatically finds a good set of rules (decisions) that accurately categorize five different activity classes.
+
+First we load both training and testing data from local directory.
+```{r cache=TRUE}
+training=read.csv('pml-training.csv',stringsAsFactor=F)
+testing=read.csv('pml-testing.csv',stringsAsFactor=F)
+```
+
+Examine the training data
+```{r cache=TRUE}
+summary(training)
+```
+
+It looks like there are many NA in training data.  Let's see how many NA in those incomplete columns.
+```{r cache=TRUE}
+training[training==""]=NA
+training[training=="NA"]=NA
+naCounts=colSums(is.na(training))
+naCounts[naCounts>0]
+```
+
+Since the numbers of NA in above columns are the same and close the number of rows in training, we consider those columns could only convey information from small portion of training data.  As a result, we discard those columns in preprocessing stage and apply learning algorithm on data without those columns.
+
+Discard those columns whose number of NA is more than 50% of observations.
+
+```{r cache=TRUE}
+usefulTraining=training[,colSums(is.na(training))<=nrow(training)/2]
+```
+
+Check again remained columns.
+```{r cache=TRUE}
+str(usefulTraining)
+```
+
+We will only use column 9 to the last column since the first 8 columns are unrelated to measurements of activities.
+```{r cache=TRUE}
+usefulTraining=usefulTraining[,seq(9,ncol(usefulTraining))]
+usefulTraining$classe=factor(usefulTraining$classe)
+summary(usefulTraining$classe)
+```
+
+Since the number of observations is about 20000, 70% of training data will be used to train the random forest and 30% as cross validation set.  Load the caret library first and partition our preprocessed training data.
+```{r cache=TRUE}
+library(caret)
+inTrain=createDataPartition(y=usefulTraining$classe,p=0.7,list=FALSE)
+actualTraining=usefulTraining[inTrain,]
+actualXValid=usefulTraining[-inTrain,]
+```
+
+We select random forest as the learning algorithm.  After the model is built by learning from our __actualTraining__ data frame, the model is validated by __actualXValid__ data frame.
+```{r cache=TRUE}
+library(randomForest)
+modFit=randomForest(classe~.,data=actualTraining,method="class")
+modFit
+pred=predict(modFit,newdata=actualXValid)
+actualXValid$predRight=pred==actualXValid$classe
+confusionMatrix(pred,actualXValid$classe)
+```
+Based on confusion matrix, we believe our random forest model could predict activity classes with accuracy above 95%.  If the test data comes from the same distribution, we believe the out-of-sample error rate will be similar to our in-sample error rate, i.e. less than 5%.
+
+Now let's make the prediction on test data.
+```{r cache=TRUE}
+pred=predict(modFit,newdata=testing)
+pred
+```
